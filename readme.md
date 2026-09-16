@@ -51,7 +51,7 @@
 
 ```bash
 # 1. Клонируйте репозиторий
-git clone https://github.com/USERNAME/photo-to-word.git
+git clone https://github.com/MRDIMAKO/photo-to-word.git
 cd photo-to-word
 
 # 2. Установите зависимости
