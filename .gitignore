@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Настройки пользователя
+.photoword_settings.json
+
+# Но НЕ игнорируем важные файлы
+!photoword.spec
+!icon.ico
+!logo.png
+!qr.png
