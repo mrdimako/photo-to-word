@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QListWidget, QListWidgetItem, QFileDialog,
     QMessageBox, QFrame, QSizePolicy, QProgressBar,
-    QLineEdit, QCheckBox, QButtonGroup, QDialog,
+    QLineEdit, QCheckBox, QButtonGroup, QDialog, QScrollArea,
     QGraphicsDropShadowEffect, QAbstractItemView
 )
 from PySide6.QtCore import Qt, QSize, QTimer, QEvent
@@ -27,7 +27,7 @@ from PIL import Image, ImageDraw, ImageQt
 
 # ---------- Информация ----------
 APP_NAME = "Photo to Word"
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.2.2"
 APP_YEAR = "2026"
 APP_AUTHOR = "Дмитрий Королев"
 APP_TG = "@mr_dimakorolev"
@@ -78,7 +78,7 @@ TRANSLATIONS = {
         "about_author": "Автор",
         "about_tg": "Telegram",
         "about_email": "E-mail",
-        "about_license": "Программа предоставляется «как есть».<br>Запрещено распространение без согласия автора.",
+        "about_license": "Программа предоставляется «как есть»<br>Запрещено распространение без согласия автора",
         "about_donate": "Поддержать проект",
         "about_donate_hint": "Отсканируйте QR-код или перейдите по ссылке:",
         "about_close": "Закрыть",
@@ -137,7 +137,7 @@ TRANSLATIONS = {
         "about_author": "Author",
         "about_tg": "Telegram",
         "about_email": "E-mail",
-        "about_license": "The program is provided \"as is\".<br>Distribution without the author's consent is prohibited.",
+        "about_license": "The program is provided \"as is\"<br>Distribution without the author's consent is prohibited",
         "about_donate": "Support the project",
         "about_donate_hint": "Scan the QR code or follow the link:",
         "about_close": "Close",
@@ -498,8 +498,8 @@ class Card(QFrame):
         self.setGraphicsEffect(shadow)
 
         self.layout = QVBoxLayout(self)
-        self.layout.setContentsMargins(18, 18, 18, 18)
-        self.layout.setSpacing(12)
+        self.layout.setContentsMargins(16, 14, 16, 14)
+        self.layout.setSpacing(10)
 
         self.title_label = None
         if title:
@@ -539,7 +539,7 @@ class AboutDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(tr("about_title"))
         self.setModal(True)
-        self.setMinimumWidth(440)
+        self.setMinimumWidth(420)
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(24, 24, 24, 24)
@@ -670,44 +670,68 @@ class PhotoToWordApp(QMainWindow):
 
     # ------------------------------------------------------------------
     def _setup_geometry(self):
+        """Адаптивная геометрия с учётом DPI и реального размера экрана."""
         screen = QApplication.primaryScreen()
         if screen:
             avail = screen.availableGeometry()
             aw, ah = avail.width(), avail.height()
-            dpi = screen.logicalDotsPerInch()
         else:
             aw, ah = 1280, 800
-            dpi = 96
+            avail = None
 
-        extra_h = int(3 * dpi / 2.54)
+        # Окно почти во весь экран, но с запасом.
+        # avail уже в логических пикселях — при DPI 125% на 1366x768
+        # он будет ~1092x614, что корректно.
+        w = min(int(aw * 0.96), 1500)
+        h = min(int(ah * 0.96), 1200)
 
-        w = min(int(aw * 0.90), 1400)
-        h = min(int(ah * 0.88) + extra_h, 1150)
-        w = max(w, min(900, aw))
-        h = max(h, min(620 + extra_h, ah))
+        # Минимум не должен превышать экран.
+        min_w = min(720, aw)
+        min_h = min(520, ah)
+        self.setMinimumSize(min_w, min_h)
 
-        self.setMinimumSize(min(800, aw), min(580 + extra_h, ah))
+        w = max(w, min_w)
+        h = max(h, min_h)
         self.resize(w, h)
 
-        x = avail.x() + (aw - w) // 2
-        y = avail.y() + (ah - h) // 2
-        self.move(x, y)
+        if avail is not None:
+            x = avail.x() + (aw - w) // 2
+            y = avail.y() + (ah - h) // 2
+            self.move(x, y)
 
     # ------------------------------------------------------------------
     def _build_ui(self):
         central = GradientWidget()
         self.setCentralWidget(central)
-        root = QVBoxLayout(central)
-        root.setContentsMargins(20, 15, 20, 15)
-        root.setSpacing(15)
+
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # QScrollArea — страховка на маленьких экранах / высоком DPI.
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll.setObjectName("MainScroll")
+        outer.addWidget(self.scroll)
+
+        inner = GradientWidget()
+        self.scroll.setWidget(inner)
+
+        root = QVBoxLayout(inner)
+        root.setContentsMargins(14, 10, 14, 10)
+        root.setSpacing(10)
 
         # ===== Топбар =====
         topbar = QHBoxLayout()
+        topbar.setSpacing(8)
 
         if os.path.exists(LOGO_FILE):
             logo_lbl = QLabel()
             pix = QPixmap(LOGO_FILE).scaled(
-                64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                56, 56, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             logo_lbl.setPixmap(pix)
             logo_lbl.setObjectName("TopLogo")
             topbar.addWidget(logo_lbl)
@@ -736,8 +760,10 @@ class PhotoToWordApp(QMainWindow):
         # ===== Карточка 1 =====
         self.card1 = Card(tr("card1"))
         self.card1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.card1.setMinimumHeight(240)
 
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
         self.btn_select = RoundedButton(tr("select"), bg=theme.ACCENT)
         self.btn_select.clicked.connect(self.select_files)
         btn_row.addWidget(self.btn_select)
@@ -755,57 +781,64 @@ class PhotoToWordApp(QMainWindow):
         self.card1.layout.addLayout(btn_row)
 
         content_row = QHBoxLayout()
-        content_row.setSpacing(12)
+        content_row.setSpacing(10)
 
         self.list_widget = QListWidget()
         self.list_widget.setIconSize(QSize(THUMB_SIZE, THUMB_SIZE))
         self.list_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.list_widget.setObjectName("PhotoList")
         self.list_widget.itemSelectionChanged.connect(self.on_select)
-        self.list_widget.setMinimumWidth(220)
-        content_row.addWidget(self.list_widget, 2)
+        self.list_widget.setMinimumWidth(150)
+        self.list_widget.setMinimumHeight(140)
+        self.list_widget.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
+        content_row.addWidget(self.list_widget, 1)
 
         right_col = QVBoxLayout()
-        right_col.setSpacing(10)
+        right_col.setSpacing(8)
 
         preview_frame = QFrame()
         preview_frame.setObjectName("PreviewFrame")
+        preview_frame.setMinimumHeight(160)
         preview_layout = QVBoxLayout(preview_frame)
         preview_layout.setContentsMargins(8, 8, 8, 8)
+        preview_layout.setSpacing(6)
 
         self.preview_label = QLabel(tr("preview_placeholder"))
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setObjectName("PreviewLabel")
-        self.preview_label.setMinimumSize(360, 260)
-        self.preview_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.preview_label.setMinimumSize(180, 130)
+        self.preview_label.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.preview_label.installEventFilter(self)
         preview_layout.addWidget(self.preview_label, 1)
 
         self.preview_info = QLabel("")
         self.preview_info.setObjectName("PreviewInfo")
         self.preview_info.setAlignment(Qt.AlignCenter)
+        self.preview_info.setWordWrap(True)
         preview_layout.addWidget(self.preview_info)
 
         right_col.addWidget(preview_frame, 1)
 
         ctrl_row = QHBoxLayout()
-        ctrl_row.setSpacing(10)
+        ctrl_row.setSpacing(6)
         ctrl_row.addStretch()
 
         self.btn_up = RoundedButton(tr("btn_up"), bg=theme.NEUTRAL, fg=theme.TEXT,
-                                    hover=theme.NEUTRAL_HOVER, height=36,
-                                    width=110)
+                                    hover=theme.NEUTRAL_HOVER, height=34,
+                                    width=100)
         self.btn_up.clicked.connect(lambda: self.move_selected(-1))
         ctrl_row.addWidget(self.btn_up)
 
         self.btn_down = RoundedButton(tr("btn_down"), bg=theme.NEUTRAL, fg=theme.TEXT,
-                                      hover=theme.NEUTRAL_HOVER, height=36,
-                                      width=110)
+                                      hover=theme.NEUTRAL_HOVER, height=34,
+                                      width=100)
         self.btn_down.clicked.connect(lambda: self.move_selected(1))
         ctrl_row.addWidget(self.btn_down)
 
         self.btn_rotate = QPushButton("↺")
-        self.btn_rotate.setFixedSize(36, 36)
+        self.btn_rotate.setFixedSize(34, 34)
         self.btn_rotate.setCursor(Qt.PointingHandCursor)
         self.btn_rotate.setObjectName("RotateBtn")
         self.btn_rotate.setToolTip(tr("btn_rotate_tip"))
@@ -815,7 +848,7 @@ class PhotoToWordApp(QMainWindow):
         ctrl_row.addStretch()
         right_col.addLayout(ctrl_row)
 
-        content_row.addLayout(right_col, 5)
+        content_row.addLayout(right_col, 2)
         self.card1.layout.addLayout(content_row, 1)
 
         self.count_label = QLabel(tr("count", n=0))
@@ -826,31 +859,43 @@ class PhotoToWordApp(QMainWindow):
 
         # ===== Карточка 2 =====
         self.card2 = Card(tr("card2"))
-        self.card2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.card2.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         row1 = QHBoxLayout()
+        row1.setSpacing(6)
         self.lbl_height = QLabel(tr("height"))
+        self.lbl_height.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         row1.addWidget(self.lbl_height)
         self.height_input = QLineEdit("6")
-        self.height_input.setFixedWidth(70)
+        self.height_input.setMinimumWidth(56)
+        self.height_input.setMaximumWidth(90)
+        self.height_input.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         row1.addWidget(self.height_input)
-        row1.addSpacing(10)
+        row1.addSpacing(6)
         self.lbl_width = QLabel(tr("width"))
+        self.lbl_width.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         row1.addWidget(self.lbl_width)
         self.width_input = QLineEdit("8")
-        self.width_input.setFixedWidth(70)
+        self.width_input.setMinimumWidth(56)
+        self.width_input.setMaximumWidth(90)
+        self.width_input.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         row1.addWidget(self.width_input)
         row1.addStretch()
         self.card2.layout.addLayout(row1)
 
         row2 = QHBoxLayout()
+        row2.setSpacing(6)
         self.lbl_table_w = QLabel(tr("table_width"))
+        self.lbl_table_w.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         row2.addWidget(self.lbl_table_w)
         self.table_width_input = QLineEdit("17")
-        self.table_width_input.setFixedWidth(70)
+        self.table_width_input.setMinimumWidth(56)
+        self.table_width_input.setMaximumWidth(90)
+        self.table_width_input.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         row2.addWidget(self.table_width_input)
         self.lbl_table_w_hint = QLabel(tr("table_width_hint_portrait"))
         self.lbl_table_w_hint.setObjectName("Muted")
+        self.lbl_table_w_hint.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         row2.addWidget(self.lbl_table_w_hint)
         row2.addStretch()
         self.card2.layout.addLayout(row2)
@@ -858,18 +903,23 @@ class PhotoToWordApp(QMainWindow):
         row3 = QHBoxLayout()
         self.keep_aspect = QCheckBox(tr("keep_aspect"))
         self.keep_aspect.setChecked(True)
+        self.keep_aspect.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         row3.addWidget(self.keep_aspect)
         row3.addStretch()
         self.card2.layout.addLayout(row3)
 
         row4 = QHBoxLayout()
+        row4.setSpacing(8)
         self.lbl_orient = QLabel(tr("orientation"))
+        self.lbl_orient.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         row4.addWidget(self.lbl_orient)
         self.orient_group = QButtonGroup(self)
         self.orient_group.setExclusive(True)
         self.rb_portrait = QCheckBox(tr("portrait"))
         self.rb_portrait.setChecked(True)
+        self.rb_portrait.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         self.rb_landscape = QCheckBox(tr("landscape"))
+        self.rb_landscape.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         self.orient_group.addButton(self.rb_portrait)
         self.orient_group.addButton(self.rb_landscape)
         row4.addWidget(self.rb_portrait)
@@ -878,13 +928,16 @@ class PhotoToWordApp(QMainWindow):
         self.card2.layout.addLayout(row4)
 
         row5 = QHBoxLayout()
+        row5.setSpacing(8)
         self.lbl_cols = QLabel(tr("columns"))
+        self.lbl_cols.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
         row5.addWidget(self.lbl_cols)
         self.col_group = QButtonGroup(self)
         self.col_group.setExclusive(True)
         self.col_buttons = []
         for c, key in zip((1, 2, 3), ("col_1", "col_2", "col_3")):
             cb = QCheckBox(tr(key))
+            cb.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Preferred)
             if c == 2:
                 cb.setChecked(True)
             self.col_group.addButton(cb, c)
@@ -895,6 +948,7 @@ class PhotoToWordApp(QMainWindow):
 
         self.hint_label = QLabel("")
         self.hint_label.setObjectName("Muted")
+        self.hint_label.setWordWrap(True)
         self.card2.layout.addWidget(self.hint_label)
 
         self.rb_portrait.toggled.connect(self.update_hint)
@@ -904,10 +958,10 @@ class PhotoToWordApp(QMainWindow):
 
         # ===== Карточка 3 =====
         self.card3 = Card(tr("card3"))
-        self.card3.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.card3.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.create_btn = RoundedButton(tr("create"),
-                                        bg=theme.ACCENT, height=45)
+                                        bg=theme.ACCENT, height=44)
         self.create_btn.setFont(font(12, QFont.Bold))
         self.create_btn.clicked.connect(self.create_word_doc)
         self.card3.layout.addWidget(self.create_btn, alignment=Qt.AlignCenter)
@@ -920,6 +974,7 @@ class PhotoToWordApp(QMainWindow):
         self.status_label = QLabel(tr("status_ready"))
         self.status_label.setObjectName("Muted")
         self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setWordWrap(True)
         self.card3.layout.addWidget(self.status_label)
 
         footer = QLabel(f"© {APP_YEAR} • v{APP_VERSION}")
@@ -1104,6 +1159,14 @@ class PhotoToWordApp(QMainWindow):
         self.setStyleSheet(f"""
             QMainWindow {{ background-color: {theme.BG_GRAD_1}; }}
 
+            QScrollArea#MainScroll {{
+                background: transparent;
+                border: none;
+            }}
+            QScrollArea#MainScroll > QWidget > QWidget {{
+                background: transparent;
+            }}
+
             QWidget {{
                 background: transparent;
                 color: {theme.TEXT};
@@ -1120,7 +1183,7 @@ class PhotoToWordApp(QMainWindow):
                 color: {theme.TEXT_MUTED};
                 background-color: {theme.PREVIEW_BG};
                 border-radius: 10px;
-                padding: 10px;
+                padding: 6px;
             }}
             QLabel#PreviewInfo {{ color: {theme.TEXT_MUTED}; font-size: 9pt; }}
 
@@ -1139,7 +1202,7 @@ class PhotoToWordApp(QMainWindow):
                 background-color: {theme.NEUTRAL};
                 color: {theme.TEXT};
                 border: 1px solid {theme.INPUT_BORDER};
-                border-radius: 18px;
+                border-radius: 17px;
                 font-size: 15pt;
                 font-weight: bold;
                 padding: 0;
@@ -1159,14 +1222,14 @@ class PhotoToWordApp(QMainWindow):
                 color: {theme.TEXT};
                 border: 1px solid {theme.INPUT_BORDER};
                 border-radius: 8px;
-                padding: 6px 10px;
+                padding: 5px 8px;
             }}
             QLineEdit:focus {{ border: 1px solid {theme.ACCENT}; }}
 
             QCheckBox {{
                 color: {theme.TEXT};
                 background: transparent;
-                spacing: 8px;
+                spacing: 6px;
             }}
             QCheckBox::indicator {{
                 width: 18px; height: 18px;
@@ -1192,11 +1255,11 @@ class PhotoToWordApp(QMainWindow):
                 color: {theme.TEXT};
                 border: 1px solid {theme.INPUT_BORDER};
                 border-radius: 10px;
-                padding: 6px;
+                padding: 4px;
                 outline: none;
             }}
             QListWidget#PhotoList::item {{
-                padding: 4px;
+                padding: 3px;
                 border-radius: 8px;
             }}
             QListWidget#PhotoList::item:selected {{
@@ -1277,7 +1340,6 @@ class PhotoToWordApp(QMainWindow):
         cell_w = available / cols
         self.hint_label.setText(tr("hint", av=available, cols=cols, cw=cell_w))
 
-        # Подсказка о максимальной ширине таблицы зависит от ориентации
         if is_landscape:
             self.lbl_table_w_hint.setText(tr("table_width_hint_landscape"))
         else:
@@ -1447,8 +1509,8 @@ class PhotoToWordApp(QMainWindow):
             return
         try:
             sz = self.preview_label.size()
-            box_w = max(sz.width() - 24, 120)
-            box_h = max(sz.height() - 24, 120)
+            box_w = max(sz.width() - 12, 80)
+            box_h = max(sz.height() - 12, 80)
 
             img = Image.open(path)
             w, h = img.size
